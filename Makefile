@@ -4,14 +4,15 @@ PY ?= python
 TORCH_CPU = https://download.pytorch.org/whl/cpu
 TORCH_CUDA = https://download.pytorch.org/whl/cu130
 
-# CPU build of PyTorch (as in CI), then the package and dev tools.
+# CPU build of PyTorch (as in CI), then the package and dev tools. setuptools comes from PyPI
+# first: the PyTorch index only carries an old copy (78.1.0) with known advisories.
 setup:
-	$(PY) -m pip install --upgrade pip && $(PY) -m pip install torch --index-url $(TORCH_CPU)
+	$(PY) -m pip install --upgrade pip setuptools && $(PY) -m pip install torch --index-url $(TORCH_CPU)
 	$(PY) -m pip install -e ".[dev]"
 
 # CUDA 13.0 build of PyTorch for the GPU benchmark.
 setup-cuda:
-	$(PY) -m pip install --upgrade pip && $(PY) -m pip install torch --index-url $(TORCH_CUDA)
+	$(PY) -m pip install --upgrade pip setuptools && $(PY) -m pip install torch --index-url $(TORCH_CUDA)
 	$(PY) -m pip install -e ".[dev]"
 
 # ruff, ruff format and mypy --strict.
