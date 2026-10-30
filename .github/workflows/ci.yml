@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the workflow can read the code and nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Every action is pinned to a full commit SHA.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: make ci
+      - name: Known-vulnerability audit
+        run: make audit
+      - name: Scheduler benchmark on the tiny random model (CPU)
+        run: |
+          lie bench --requests 32 --max-batch 8 --output-len 8 64 --json bench.json | tee bench.txt
+          python - <<'PY'
+          import json
+          rows = {r["policy"]: r for r in json.load(open("bench.json"))}
+          n, c = rows["naive"], rows["continuous"]
+          print(f"::notice title=bench (tiny model, CPU)::continuous {c['tokens_per_s']:.0f} tok/s, "
+                f"{c['decode_passes']} decode passes; naive {n['tokens_per_s']:.0f} tok/s, {n['decode_passes']} passes")
+          PY
+
+  gpt2:
+    # Downloads GPT-2 (pinned revision) and checks logits and greedy output against transformers.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: make setup
+      - name: Verify GPT-2 against transformers
+        run: |
+          if lie verify --model openai-community/gpt2 --device cpu | tee verify.txt; then
+            echo "::notice title=GPT-2 verify::$(tail -1 verify.txt); $(tail -2 verify.txt | head -1)"
+          else
+            echo "::error title=GPT-2 verify::$(tail -1 verify.txt)"; exit 1
+          fi
