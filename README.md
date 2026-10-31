@@ -149,7 +149,7 @@ flowchart TB
 - [x] Write `docs/rfc/0001-design.md`: problem, goals, non-goals, chosen design
 - [x] A naive server handles one request at a time to set the baseline.
 - [x] Continuous batching adds and removes requests at every decoding step instead of waiting for a whole batch to finish.
-- [ ] CI workflow (`ci` with tests, audit and tiny-model benchmark; `gpt2` verify job): CI job written; first CI run pending.
+- [x] CI workflow (`ci` with tests, audit and tiny-model benchmark; `gpt2` verify job): green in CI; GPT-2 greedy output identical to transformers on 4/4 prompts.
 
 **M2** (≈8 h)
 - [ ] The KV cache is split into fixed-size blocks tracked by a block table (as in PagedAttention), so memory isn't wasted on padding.
