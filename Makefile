@@ -19,7 +19,7 @@ setup-cuda:
 lint:
 	$(PY) -m ruff check . && $(PY) -m ruff format --check . && $(PY) -m mypy
 
-# 36 tests on a tiny randomly initialised model (CPU, no download).
+# 44 tests on a tiny randomly initialised model (CPU, no download).
 test:
 	$(PY) -m pytest -q
 

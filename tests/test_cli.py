@@ -51,3 +51,13 @@ def test_bad_arguments_exit_2(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["verify"]) == 2
     assert main(["bench", "--output-len", "1", "600"]) == 2
     assert "error" in capsys.readouterr().err
+
+
+def test_invalid_values_exit_2_instead_of_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["bench", "--policies", "fastest"]) == 2
+    assert main(["bench", "--requests", "0", "--max-seq-len", "512"]) == 2
+    assert main(["generate", "x", "--max-tokens", "0"]) == 2
+    assert main(["generate", "x", "--max-seq-len", "1000"]) == 2  # tiny model has 512 positions
+    err = capsys.readouterr().err
+    assert err.count("error:") == 4
+    assert "Traceback" not in err

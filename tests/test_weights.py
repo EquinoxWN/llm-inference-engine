@@ -88,3 +88,8 @@ def test_download_rejects_unpinned_or_malformed_ids() -> None:
         download("openai-community/gpt2", "main")
     with pytest.raises(ValueError, match="model id"):
         download("../../etc", "0" * 40)
+
+
+def test_download_rejects_a_short_commit_hash() -> None:
+    with pytest.raises(ValueError, match="revision"):
+        download("openai-community/gpt2", "607a30d")

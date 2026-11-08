@@ -17,9 +17,9 @@ output is identical:
 
 ![GPT-2 verify against transformers and the naive / static / continuous benchmark](docs/proof/bench.jpg)
 
-36 tests pass (batched output equals naive output on random arrival schedules, KV-cache decode
+44 tests pass (batched output equals naive output on random arrival schedules, KV-cache decode
 equals a full recompute, weights equal `transformers`), lint and types are clean, and the
-dependency audit finds nothing:
+dependency audit finds nothing (screenshot from the M1 run with 36 tests; 8 were added in the 2026-11-01 quality pass):
 
 ![pytest, ruff, mypy and pip-audit output](docs/proof/tests.jpg)
 
@@ -93,7 +93,7 @@ Language: **Python** (3.11+, PyTorch). Code in [`src/llm_inference_engine/`](src
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 make setup       # CPU PyTorch + package + dev tools   (make setup-cuda for the CUDA 13.0 build)
 make lint        # ruff, ruff format, mypy --strict
-make test        # 36 tests on a tiny random model, no download
+make test        # 44 tests on a tiny random model, no download
 make audit       # pip-audit (PyTorch audited by its PyPI version)
 make verify      # download GPT-2 (rev 607a30d) and compare logits and greedy output with transformers
 make bench-gpu   # naive vs static vs continuous on GPT-2, float16, CUDA
@@ -115,15 +115,17 @@ Full numbers, the analysis and how to reproduce them: [docs/results/m1.md](docs/
 | Test file | Tests | What it proves |
 |---|---|---|
 | `tests/test_model.py` | 6 | KV-cache prefill + decode equals a full recompute; one batched decode over ragged lengths equals each sequence alone; slots are isolated; shape validation |
-| `tests/test_engine.py` | 11 | Continuous batching gives the naive server's exact tokens on random arrival schedules (greedy and seeded sampling); requests join the step after another leaves; static batching makes late requests wait; decode passes continuous < static < naive; EOS, validation, abort |
-| `tests/test_weights.py` | 5 | GPT-2 weights load strictly and match `transformers` logits and `generate()`; unpinned revisions and malformed ids refused |
-| `tests/test_server.py` | 6 | JSON and SSE completions agree; 422/400 on bad input; concurrent clients share decode passes only under `continuous`; full queue refused; partial UTF-8 held back |
-| `tests/test_bench.py` | 5 | Seeded workloads; TTFT measured from arrival (fake clock); all policies generate the same tokens |
-| `tests/test_cli.py` | 3 | `lie generate` and `lie bench` end to end; bad arguments exit 2 |
+| `tests/test_engine.py` | 14 | Continuous batching gives the naive server's exact tokens on random arrival schedules (greedy and seeded sampling); requests join the step after another leaves; static batching makes late requests wait; decode passes continuous < static < naive; EOS, validation boundaries, abort; top-k 1 equals greedy; temperature scales the logits |
+| `tests/test_weights.py` | 6 | GPT-2 weights load strictly and match `transformers` logits and `generate()`; unpinned revisions and malformed ids refused |
+| `tests/test_server.py` | 7 | JSON and SSE completions agree; 422/400 on bad input; concurrent clients share decode passes only under `continuous`; full queue refused; partial UTF-8 held back; an aborted request leaves the engine |
+| `tests/test_bench.py` | 7 | Seeded workloads; TTFT measured from arrival (fake clock); all policies generate the same tokens |
+| `tests/test_cli.py` | 4 | `lie generate` and `lie bench` end to end; bad arguments and invalid values exit 2 |
+
+Quality check against the 10 engineering rules, with the mutation table: [docs/quality/2026-11-01.md](docs/quality/2026-11-01.md).
 
 | Check | Result |
 |---|---|
-| Tests (`make test`) | **36 passed**, 0 failed |
+| Tests (`make test`) | **44 passed**, 0 failed |
 | GPT-2 vs `transformers` (`make verify`) | max logit difference 6.1e-05; greedy output identical 4/4 (32 tokens each) |
 | Throughput, 32 queued requests, GPT-2 fp16 on RTX 4050 | naive 23.3, static 186.4, **continuous 272.7** tokens/s |
 | TTFT p50 at 4 requests/s | naive 44.5 s, static 4.0 s, **continuous 84 ms** |
@@ -136,11 +138,11 @@ Full numbers, the analysis and how to reproduce them: [docs/results/m1.md](docs/
 ```mermaid
 flowchart TB
   TM["test_model (6)<br/>cache = recompute,<br/>ragged batch, slot isolation"] --> MO["model.py"]
-  TE["test_engine (11)<br/>batched = naive tokens,<br/>join/leave, policies"] --> EN["engine.py, sampling.py"]
-  TW["test_weights (5)<br/>= transformers"] --> WE["weights.py"]
-  TS["test_server (6)<br/>JSON/SSE, 4xx/503,<br/>concurrent batching"] --> SE["server.py"]
-  TB["test_bench (5)"] --> BE["bench.py"]
-  TC["test_cli (3)"] --> CL["cli.py"]
+  TE["test_engine (14)<br/>batched = naive tokens,<br/>join/leave, policies"] --> EN["engine.py, sampling.py"]
+  TW["test_weights (6)<br/>= transformers"] --> WE["weights.py"]
+  TS["test_server (7)<br/>JSON/SSE, 4xx/503,<br/>concurrent batching"] --> SE["server.py"]
+  TB["test_bench (7)"] --> BE["bench.py"]
+  TC["test_cli (4)"] --> CL["cli.py"]
 ```
 
 ## Roadmap

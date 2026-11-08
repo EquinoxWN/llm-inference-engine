@@ -84,3 +84,17 @@ def test_policies_generate_the_same_tokens_and_continuous_needs_fewest_passes(mo
     md = table(list(results.values()))
     assert md.count("\n") == 4
     assert "| continuous |" in md
+
+
+def test_percentile_rounds_the_rank_up() -> None:
+    vals = [float(v) for v in range(1, 11)]
+    assert percentile(vals, 95) == 10.0
+    assert percentile(vals, 91) == 10.0
+    assert percentile(vals, 90) == 9.0
+
+
+def test_ttft_is_the_first_token_not_the_last(model: GPT) -> None:
+    timed = Workload(n_requests=2, prompt_len=(2, 2), output_len=(8, 8)).requests(257)
+    clock = FakeClock()
+    res = replay(Engine(model, Policy.CONTINUOUS, max_seq_len=32), timed, clock, clock.sleep)
+    assert res.ttft_p95_ms < res.latency_p50_ms

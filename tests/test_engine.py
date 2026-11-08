@@ -5,10 +5,11 @@ from __future__ import annotations
 import random
 
 import pytest
+import torch
 
 from llm_inference_engine.engine import Engine, Policy, Request
 from llm_inference_engine.model import GPT
-from llm_inference_engine.sampling import SamplingParams
+from llm_inference_engine.sampling import SamplingParams, sample_rows
 
 
 def _requests(seed: int, n: int, sampled: bool = False) -> list[Request]:
@@ -155,3 +156,45 @@ def test_sampling_params_validation() -> None:
         SamplingParams(temperature=-1)
     with pytest.raises(ValueError, match="top_k"):
         SamplingParams(top_k=-1)
+
+
+def test_request_validation_boundaries(model: GPT) -> None:
+    eng = Engine(model, Policy.CONTINUOUS, max_seq_len=32)
+    eng.add_request(Request("fits", [1] * 25, SamplingParams(max_new_tokens=7)))  # exactly 32
+    eng.add_request(Request("top", [model.config.vocab_size - 1]))
+    with pytest.raises(ValueError, match="token ids"):
+        eng.add_request(Request("over", [model.config.vocab_size]))
+    with pytest.raises(ValueError, match="token ids"):
+        eng.add_request(Request("neg", [-1]))
+
+
+def test_top_k_one_samples_the_greedy_token(model: GPT) -> None:
+    reqs = _requests(5, 4)
+    greedy = Engine(model, Policy.CONTINUOUS, max_seq_len=64).generate(reqs)
+    top1 = [
+        Request(
+            r.request_id,
+            r.prompt_ids,
+            SamplingParams(
+                max_new_tokens=r.params.max_new_tokens,
+                temperature=1.5,
+                top_k=1,
+                seed=r.params.seed,
+                stop_at_eos=False,
+            ),
+        )
+        for r in reqs
+    ]
+    assert Engine(model, Policy.CONTINUOUS, max_seq_len=64).generate(top1) == greedy
+
+
+def test_temperature_scales_the_logits() -> None:
+    logits = torch.tensor([[0.0, 1.0]])
+
+    def draws(t: float) -> list[int]:
+        """Token picked under 200 seeds at temperature t."""
+        p = SamplingParams(temperature=t, seed=0)
+        return [sample_rows(logits, [p], [torch.Generator().manual_seed(s)])[0] for s in range(200)]
+
+    assert draws(0.05) == [1] * 200  # e^-20: practically never token 0
+    assert 0 < draws(1.0).count(0) < 200

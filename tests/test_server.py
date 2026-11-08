@@ -111,3 +111,29 @@ def test_text_stream_holds_back_partial_utf8() -> None:
     assert s.push(e_acute[0]) == ""
     assert s.push(e_acute[1]) == "é"
     assert s.flush() == ""
+
+
+def test_abort_removes_a_running_request_from_the_engine(model: GPT) -> None:
+    async def run() -> Engine:
+        """Start a long request, abort it after its first token, let the loop drain."""
+        eng = Engine(model, Policy.CONTINUOUS, max_seq_len=128)
+        runner = AsyncEngine(eng)
+        runner.start()
+        from llm_inference_engine.sampling import SamplingParams
+
+        q = runner.submit(
+            Request("long", [1, 2], SamplingParams(max_new_tokens=100, stop_at_eos=False))
+        )
+        await asyncio.wait_for(q.get(), 10)
+        runner.abort("long")
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if not eng.has_work():
+                break
+        await runner.stop()
+        return eng
+
+    eng = asyncio.run(run())
+    assert eng.stats.aborted == 1
+    assert not eng.has_work()
+    assert eng.stats.finished == 0
