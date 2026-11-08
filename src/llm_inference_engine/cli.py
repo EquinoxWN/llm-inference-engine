@@ -124,8 +124,17 @@ def verify(model: GPT, tokenizer: Tokenizer, directory: Path, tokens: int, devic
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point for `lie`."""
+    """Entry point for `lie`; invalid values exit 2 with a one-line error."""
     args = _parser().parse_args(argv)
+    try:
+        return _run(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run(args: argparse.Namespace) -> int:
+    """Run one parsed subcommand."""
     if args.max_batch < 1 or not 1 <= args.max_seq_len <= 1024:
         print("error: --max-batch must be >= 1 and --max-seq-len in 1..1024", file=sys.stderr)
         return 2
@@ -178,7 +187,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"  {r.policy:<10} {r.generated_tokens} tokens in {r.seconds:.2f} s", flush=True)
     print(table(results))
     if args.json:
-        args.json.write_text(json.dumps([r.as_dict() for r in results], indent=2), "utf-8")
+        tmp = args.json.with_name(args.json.name + ".tmp")
+        tmp.write_text(json.dumps([r.as_dict() for r in results], indent=2), "utf-8")
+        tmp.replace(args.json)  # atomic: a rerun or crash never leaves a half-written file
     return 0
 
 
