@@ -21,3 +21,11 @@ CLAUDE.md
 # Local tool caches, models and benchmark output (kept inside the repo, never committed)
 .tmp/
 .mypy_cache/
+
+# Secrets
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.tfstate

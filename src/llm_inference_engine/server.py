@@ -111,8 +111,8 @@ class AsyncEngine:
             except Exception as exc:
                 for pending in self._live.values():
                     pending.queue.put_nowait(exc)
-                for seq in list(self.engine.running):
-                    self.engine.abort(seq.request.request_id)
+                for rid in list(self._live):
+                    self.engine.abort(rid)
                 self._live.clear()
                 continue
             for e in events:

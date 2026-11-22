@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from llm_inference_engine.engine import Engine, Policy, Request
+from llm_inference_engine.engine import Engine, Policy, Request, TokenEvent
 from llm_inference_engine.model import GPT
 from llm_inference_engine.server import AsyncEngine, _TextStream, create_app
 from llm_inference_engine.tokenizer import ByteTokenizer
@@ -137,3 +137,25 @@ def test_abort_removes_a_running_request_from_the_engine(model: GPT) -> None:
     assert eng.stats.aborted == 1
     assert not eng.has_work()
     assert eng.stats.finished == 0
+
+
+def test_failed_step_drops_every_request_it_reported(model: GPT) -> None:
+    async def run() -> tuple[Engine, object]:
+        """Every step fails; a request that got the error must not stay queued in the engine."""
+        eng = Engine(model, Policy.CONTINUOUS, max_seq_len=32)
+
+        def failing_step() -> list[TokenEvent]:
+            raise RuntimeError("device lost")
+
+        eng.step = failing_step  # type: ignore[method-assign]
+        runner = AsyncEngine(eng)
+        runner.start()
+        q = runner.submit(Request("a", [1]))
+        item = await asyncio.wait_for(q.get(), 10)
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        return eng, item
+
+    eng, item = asyncio.run(run())
+    assert isinstance(item, RuntimeError)
+    assert not eng.has_work()
